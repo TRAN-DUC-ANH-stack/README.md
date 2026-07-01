@@ -1,121 +1,165 @@
-# NỘI DUNG THUYẾT TRÌNH — RBL: Page Tables (Structure, Design, and Performance Analysis)
-### SE2008 — Group 3
+# KỊCH BẢN THUYẾT TRÌNH
+## Page Tables: Structure, Design, and Performance Analysis
+**Môn: OSG202 — Nhóm 3**
+**Tổng thời lượng dự kiến: ~12–15 phút (2–3 phút/người)**
 
 ---
 
-## 1. Nguyễn Hoàng Anh Khoa (Leader) — Mở đầu & Tổng quan đề tài
-*Thời lượng gợi ý: ~2 phút*
+## 1. Nguyễn Hoàng Anh Khoa — Leader
+### Mở đầu & Đặt vấn đề (2-3 phút)
 
-Xin chào thầy/cô và các bạn, mình là Khoa, leader của Group 3. Hôm nay nhóm mình xin trình bày đề tài **"Page Tables: Structure, Design, and Performance Analysis"**, dựa trên Section 3.5 của cuốn *Modern Operating Systems (4th Edition)* — Andrew Tanenbaum.
+**Lời dẫn mở đầu:**
 
-Trong các hệ điều hành hiện đại, mỗi tiến trình được cấp một không gian địa chỉ ảo riêng, có thể lên tới 2^64 byte trên hệ 64-bit. Nhưng bộ nhớ vật lý thực tế lại rất giới hạn, chỉ vài GB đến vài trăm GB. Cơ chế **paging** ra đời để giải quyết mâu thuẫn này, chia không gian địa chỉ thành các trang có kích thước cố định và ánh xạ chúng vào các khung trang trong bộ nhớ vật lý. Và **Page Table** chính là cấu trúc dữ liệu trung tâm thực hiện việc ánh xạ đó.
+> "Xin chào thầy/cô và các bạn. Nhóm 3 chúng em xin trình bày đề tài **'Page Tables: Structure, Design, and Performance Analysis'**. Em là Anh Khoa, leader của nhóm, sẽ giới thiệu tổng quan trước khi các bạn đi sâu vào từng phần."
 
-Tuy nhiên, cấu trúc Page Table cũng đặt ra nhiều thách thức kỹ thuật:
-- **Kích thước bảng quá lớn**: với không gian 32-bit và trang 4KB, một tiến trình có thể cần tới 1 triệu entry.
-- **Chi phí truy cập**: mỗi lần truy cập bộ nhớ đều phải tra bảng trang trước, gần như tăng gấp đôi thời gian truy cập.
-- **Chiếm dụng bộ nhớ**: bảng trang phẳng (flat page table) chiếm một khối bộ nhớ liên tục dù phần lớn không gian địa chỉ không được dùng đến.
+**Nội dung trình bày:**
 
-Từ đó, nhóm mình đặt ra 3 mục tiêu nghiên cứu chính:
-1. Phân tích chi tiết cấu trúc của một Page Table Entry (PTE) và ý nghĩa của từng bit trạng thái.
-2. So sánh các kỹ thuật tối ưu: TLB, Multilevel Page Table, và Inverted Page Table.
-3. Đánh giá hiệu năng thực nghiệm thông qua mô phỏng, từ đó đưa ra khuyến nghị thiết kế.
+- Giới thiệu chủ đề: **Page Table** là cấu trúc dữ liệu trung tâm giúp **MMU (Memory Management Unit)** dịch địa chỉ ảo (virtual address) sang địa chỉ vật lý (physical address) — nền tảng của cơ chế bộ nhớ ảo trong hệ điều hành hiện đại.
 
-Báo cáo của nhóm sẽ đi theo trình tự: cơ sở lý thuyết, phương pháp nghiên cứu, phân tích các thành phần chính, thiết lập thực nghiệm, kết quả, thảo luận và kết luận. Sau đây mình xin mời bạn [Tên bạn Nguyễn Đăng Khoa] trình bày phần cơ sở lý thuyết và cấu trúc kỹ thuật của Page Table.
+- Nêu vấn đề đặt ra:
+  - Với hệ thống 32-bit và kích thước trang 4KB, một flat page table có thể cần tới ~1 triệu entry cho mỗi tiến trình.
+  - Điều này gây ra **overhead lớn về bộ nhớ** và **độ trễ truy cập** (mỗi lần truy cập bộ nhớ đều phải "đi qua" page table).
+  - → Đặt câu hỏi: làm sao thiết kế page table vừa tiết kiệm bộ nhớ, vừa đảm bảo tốc độ truy cập?
 
----
+- Nêu 3 mục tiêu chính của báo cáo:
+  1. Phân tích cấu trúc của **Page Table Entry (PTE)**.
+  2. So sánh 3 kỹ thuật quản lý: **TLB, Multilevel Page Table, Inverted Page Table**.
+  3. Đánh giá hiệu năng thực tế thông qua **mô phỏng (simulation)**.
 
-## 2. Nguyễn Đăng Khoa (System Engineer) — Cơ sở lý thuyết & Cấu trúc kỹ thuật
-*Thời lượng gợi ý: ~3–4 phút*
+- Giới thiệu bố cục bài thuyết trình, dẫn sang phần tiếp theo:
 
-Cảm ơn Khoa. Mình là [Nguyễn Đăng Khoa], phụ trách phần lý thuyết nền tảng và phân tích cấu trúc kỹ thuật của Page Table.
-
-**Về lịch sử**, cơ chế paging lần đầu xuất hiện trên hệ thống Atlas tại Đại học Manchester vào đầu thập niên 1960, với mục tiêu ban đầu là cho phép chương trình lớn chạy được trên bộ nhớ vật lý giới hạn — đây chính là khởi nguồn của khái niệm *virtual memory*. Đến năm 1985, Intel 80386 là CPU x86 đầu tiên hỗ trợ paging phần cứng với cấu trúc *two-level page table*, đặt nền móng cho kiến trúc IA-32 vẫn còn được dùng đến ngày nay.
-
-**Về cấu trúc PTE (Page Table Entry)** trên hệ 32-bit, mỗi entry gồm các trường chính:
-- Page frame number (20 bit) — địa chỉ khung trang vật lý tương ứng
-- Present/Absent bit — trang đang ở RAM hay đã bị swap ra đĩa
-- Protection bits — quyền Read/Write/Execute
-- Modified (Dirty) bit — trang đã bị ghi hay chưa
-- Referenced bit — phục vụ các thuật toán thay thế trang
-- Caching disabled bit — dùng cho các thanh ghi thiết bị ánh xạ bộ nhớ
-
-Địa chỉ vật lý được tính theo công thức: **Physical Address = Frame Number × Page Size + Offset**. Nếu Present bit = 0, một page fault sẽ xảy ra, buộc hệ điều hành phải nạp trang còn thiếu từ đĩa vào RAM.
-
-**Về TLB (Translation Lookaside Buffer)** — đây là một cache phần cứng tốc độ cao nằm trong MMU, lưu các ánh xạ virtual-to-physical được dùng gần nhất. Theo Chen & Baer (1995), tỷ lệ hit rate trên 95% là hoàn toàn khả thi với các workload thông thường, nhờ tính *locality* của truy cập bộ nhớ.
-
-**Về Multilevel Page Table** — kiến trúc hai cấp của Intel 386 sau này mở rộng thành 4 cấp (PML4) trên x86-64 để hỗ trợ không gian địa chỉ 48-bit. Đặc điểm cốt lõi là *lazy allocation*: các bảng trang cấp thấp chỉ được cấp phát khi vùng địa chỉ tương ứng thực sự được sử dụng, giúp tiết kiệm đáng kể bộ nhớ.
-
-**Về Inverted Page Table** — thay vì mỗi tiến trình có một bảng trang riêng, hệ thống duy trì một bảng toàn cục duy nhất với số entry cố định bằng số khung trang vật lý. Ưu điểm là kích thước bảng tỉ lệ với RAM vật lý chứ không phải với không gian địa chỉ ảo; nhược điểm là việc tra cứu phức tạp hơn, thường cần cấu trúc hash. IBM PowerPC và HP PA-RISC là các kiến trúc tiêu biểu sử dụng kỹ thuật này.
-
-Tiếp theo, mình xin mời bạn [Trần Đức Anh] trình bày phần phương pháp nghiên cứu và thiết lập thực nghiệm của nhóm.
+> "Tiếp theo, bạn Đăng Khoa sẽ trình bày phần nền tảng lý thuyết và các cơ chế kỹ thuật cốt lõi của page table."
 
 ---
 
-## 3. Trần Đức Anh (Experimental Engineer) — Phương pháp nghiên cứu & Thiết lập thực nghiệm
-*Thời lượng gợi ý: ~2–3 phút*
+## 2. Nguyễn Đăng Khoa — System Engineer
+### Nền tảng lý thuyết & Cơ chế kỹ thuật (2-3 phút)
 
-Cảm ơn bạn. Mình là Trần Đức Anh, phụ trách phần phương pháp nghiên cứu và thực nghiệm của nhóm.
+**Câu mở đầu chuyển tiếp:**
 
-Nhóm mình sử dụng kết hợp hai phương pháp: **phân tích lý thuyết** và **thực nghiệm mô phỏng**.
+> "Cảm ơn Anh Khoa. Em là Đăng Khoa, phụ trách phần nền tảng lý thuyết và các cơ chế kỹ thuật chính liên quan đến page table."
 
-Về phương pháp lý thuyết, nhóm thực hiện *systematic literature analysis*, tập trung vào Section 3.5 của Tanenbaum kết hợp với các tài liệu bổ sung về kiến trúc phần cứng. Quy trình gồm 4 bước: đọc và tổng hợp nội dung lý thuyết, mô hình hóa cấu trúc, so sánh các phương án thiết kế kiến trúc, và liên hệ với các implementation thực tế trong Linux, Windows.
+**Nội dung trình bày:**
 
-Về phương pháp thực nghiệm, nhóm sử dụng công cụ mô phỏng hệ điều hành trực tuyến **OS Simulator** (ddpigeon.github.io/os-simulator) để kiểm chứng các lý thuyết đã tổng hợp. Nhóm thiết kế 3 kịch bản kiểm thử:
-- **Test case 1 — Sequential access**: truy cập trang tuần tự, đo TLB hit rate trong điều kiện locality cao.
-- **Test case 2 — Random access**: truy cập ngẫu nhiên, đo hit rate trong điều kiện locality thấp.
-- **Test case 3 — Working set variation**: thay đổi kích thước working set để quan sát điểm "gãy" hiệu năng.
+- **Lược sử phát triển:**
+  - Khái niệm paging xuất hiện từ hệ thống **Atlas** (Đại học Manchester, thập niên 1960) — được xem là hệ thống đầu tiên áp dụng bộ nhớ ảo.
+  - Đến năm **1985**, **Intel 80386** là CPU x86 đầu tiên hỗ trợ paging 2 cấp (2-level paging), đặt nền móng cho các thiết kế hiện đại.
 
-Các chỉ số được đo gồm: tổng số page fault, TLB hit rate, Effective Memory Access Time (EMAT), và tổng số lần page table walk.
+- **Cấu trúc Page Table Entry (PTE) — ví dụ hệ 32-bit:**
+  - **Page Frame Number (PFN):** xác định khung trang vật lý tương ứng.
+  - **Bit Present/Absent:** cho biết trang có đang nằm trong RAM hay đã bị swap ra đĩa.
+  - **Protection bits (R/W/X):** quyền đọc/ghi/thực thi trên trang.
+  - **Modified bit (Dirty bit):** đánh dấu trang đã bị thay đổi nội dung.
+  - **Referenced bit:** hỗ trợ các thuật toán thay thế trang (page replacement).
 
-Về thiết lập cụ thể, môi trường mô phỏng được cấu hình như sau: kích thước trang 4KB, bộ nhớ vật lý 16 khung trang (64KB), không gian địa chỉ ảo 64 trang (256KB), TLB có 8 entry quản lý bằng phần cứng, chính sách thay thế LRU, và mỗi test case chạy 1000 thao tác truy cập.
+- **3 kỹ thuật cốt lõi được nhóm phân tích:**
+  1. **TLB (Translation Lookaside Buffer):** bộ nhớ đệm phần cứng, lưu các ánh xạ địa chỉ vừa dùng để tránh phải tra page table nhiều lần → tăng tốc đáng kể.
+  2. **Multilevel Page Table:** chia page table thành nhiều cấp (ví dụ **Intel PML4, PML5**), cho phép cấp phát "lazy" — chỉ tạo bảng con khi thực sự cần, tiết kiệm bộ nhớ.
+  3. **Inverted Page Table:** dùng một bảng toàn cục duy nhất cho toàn hệ thống (thay vì mỗi tiến trình một bảng), được áp dụng trong kiến trúc **IBM PowerPC** và **PA-RISC**.
 
-Với thiết lập này, nhóm đảm bảo có đủ dữ liệu để so sánh hiệu năng giữa các mẫu truy cập khác nhau. Sau đây mình xin mời bạn [Trần Đức Danh] trình bày phần kết quả và phân tích số liệu.
-
----
-
-## 4. Trần Đức Danh (Data Analyst) — Kết quả & Phân tích số liệu
-*Thời lượng gợi ý: ~3 phút*
-
-Cảm ơn Đức Anh. Mình là Trần Đức Danh, phụ trách phân tích số liệu thực nghiệm của nhóm.
-
-Sau khi chạy 4 kịch bản kiểm thử, nhóm thu được kết quả như sau:
-
-| Test Case | TLB Hit Rate | Page Faults | EMAT |
-|---|---|---|---|
-| TC1 — Sequential Access | 98.7% | 16 | 2.59 ns |
-| TC2 — Random Access (small) | 87.3% | 48 | 27.1 ns |
-| TC3 — Random Access (large) | 42.1% | 312 | 116.8 ns |
-| TC4 — Working set = 8 pages | 96.2% | 22 | 5.52 ns |
-
-Kết quả TC1 cho thấy truy cập tuần tự tận dụng tốt **spatial locality**, đạt hit rate gần 99%. Ngược lại, TC2 và TC3 cho thấy hiệu năng suy giảm rõ rệt khi working set vượt quá dung lượng TLB (8 entry). Đặc biệt, TC4 là bằng chứng thực nghiệm cho lý thuyết *working set* của Denning: chỉ cần working set nằm gọn trong TLB, hiệu năng vẫn được duy trì cao dù mẫu truy cập không hoàn toàn tuần tự.
-
-Điểm đáng chú ý nhất: EMAT tăng gần **45 lần** giữa TC1 và TC3 — từ 2.59ns lên 116.8ns. Điều này nhấn mạnh tầm quan trọng của việc thiết kế phần mềm theo hướng *locality-aware*, tức tối ưu mẫu truy cập bộ nhớ để tận dụng tối đa TLB.
-
-Những số liệu này cũng là cơ sở thực nghiệm để nhóm đưa ra các đánh giá về đánh đổi kỹ thuật (trade-off) ở phần thảo luận tiếp theo, mình xin mời bạn [Trần Lê Nghĩa] trình bày.
+> "Sau khi đã nắm được lý thuyết, mời bạn Đức Anh trình bày phần phương pháp và thiết lập thí nghiệm mà nhóm đã thực hiện."
 
 ---
 
-## 5. Trần Lê Nghĩa (Reviewer) — Thảo luận, Hạn chế & Kết luận
-*Thời lượng gợi ý: ~3 phút*
+## 3. Trần Đức Anh — Experimental Engineer
+### Phương pháp & Thiết lập thí nghiệm (2-3 phút)
 
-Cảm ơn Đức Danh. Mình là Trần Lê Nghĩa, phụ trách phần thảo luận, đánh giá hạn chế và kết luận của báo cáo.
+**Câu mở đầu chuyển tiếp:**
 
-**Về đánh đổi kỹ thuật**: dữ liệu thực nghiệm củng cố quan điểm của Tanenbaum rằng thiết kế page table luôn là bài toán đánh đổi đa chiều. Flat page table đơn giản, tra cứu nhanh nhưng tốn nhiều bộ nhớ. Multilevel page table tiết kiệm bộ nhớ nhưng tăng độ trễ khi TLB miss. Inverted page table mở rộng tốt với RAM 64-bit lớn nhưng đường tra cứu phức tạp hơn. TLB chính là mảnh ghép quan trọng giúp giảm thiểu chi phí tra cứu nhiều cấp — tuy nhiên trong hệ thống đa lõi, hiện tượng **TLB shootdown** (khi một lõi cập nhật page table, các lõi khác phải đồng bộ và invalidate TLB) có thể gây nghẽn cổ chai do chi phí Inter-Processor Interrupt.
+> "Cảm ơn Đăng Khoa. Em là Đức Anh, phụ trách phần phương pháp nghiên cứu và thiết lập thí nghiệm của nhóm."
 
-**Về xu hướng kiến trúc hiện đại**: ARM64 (như Apple Silicon dòng M) dùng page table 4 cấp với granularity linh hoạt (4KB, 16KB, 64KB); RISC-V chuẩn hóa các mô hình Sv39/Sv48/Sv57. Bên cạnh đó, công nghệ **Huge Pages** (2MB, 1GB) trên x86-64 giúp giảm đáng kể áp lực lên TLB — rất quan trọng với các hệ thống HPC và cơ sở dữ liệu lớn, được quản lý tự động qua Linux Transparent Huge Pages.
+**Nội dung trình bày:**
 
-**Về hạn chế của nghiên cứu**: công cụ mô phỏng phần mềm không phản ánh hoàn toàn các yếu tố phần cứng thực tế như cache hierarchy, hardware prefetcher, hay kiến trúc NUMA. Ngoài ra, các kịch bản kiểm thử còn giới hạn, và chi phí TLB shootdown chưa được đo trong môi trường đa luồng thực sự.
+- **Phương pháp nghiên cứu:** kết hợp giữa
+  - Phân tích lý thuyết dựa trên tài liệu tham khảo (**Tanenbaum, Modern Operating Systems, Section 3.5**).
+  - Thực nghiệm mô phỏng để kiểm chứng và đo lường hiệu năng thực tế.
 
-**Kết luận**, nhóm rút ra 4 điểm chính:
-1. Cấu trúc PTE cùng các control bit là nền tảng cho việc dịch địa chỉ và thay thế trang.
-2. TLB là yếu tố quyết định hiệu năng bộ nhớ — duy trì hit rate trên 98% với truy cập tuần tự nhưng giảm còn ~42% với truy cập ngẫu nhiên diện rộng.
-3. Multilevel Page Table là phương án cân bằng nhất cho các hệ điều hành phổ biến như Linux, Windows.
-4. Inverted Page Table phù hợp cho các hệ thống có RAM vật lý cực lớn.
+- **Công cụ mô phỏng:** nhóm sử dụng **OS Simulator** tại địa chỉ `ddpigeon.github.io/os-simulator` để mô phỏng hành vi truy cập bộ nhớ và page table.
 
-Nhóm cũng đề xuất: các nhà phát triển phần mềm nên ưu tiên thiết kế truy cập bộ nhớ theo hướng locality-aware; quản trị hệ thống nên tận dụng Huge Pages cho các dịch vụ tốn nhiều bộ nhớ. Hướng nghiên cứu tiếp theo có thể là đo hiệu năng thực tế trên silicon RISC-V Sv48, hoặc đánh giá tác động của các cơ chế giảm thiểu lỗ hổng Meltdown/Spectre như KPTI.
+- **3 test case chính được thiết kế:**
+  1. **Sequential Access** — truy cập bộ nhớ tuần tự.
+  2. **Random Access** — truy cập bộ nhớ ngẫu nhiên.
+  3. **Working Set Variation** — thay đổi kích thước tập làm việc (working set).
 
-Cảm ơn thầy/cô và các bạn đã lắng nghe phần trình bày của Group 3!
+- **Thông số mô phỏng cụ thể:**
+  - Page size: **4KB**
+  - RAM: **16 frame**
+  - TLB: **8 entry**
+  - Thuật toán thay thế: **LRU (Least Recently Used)**
+  - Số lượng thao tác: **1000 thao tác/test case**
+
+> "Với thiết lập như trên, mời bạn Đức Danh trình bày kết quả thực nghiệm mà nhóm thu được."
 
 ---
 
-**Lưu ý cho cả nhóm**: mỗi phần nên luyện tập để nói trong khoảng thời gian tương ứng, dùng slide minh họa cho các bảng số liệu (Table 1–4) và công thức EMAT để bài thuyết trình sinh động hơn.
+## 4. Trần Đức Danh — Data Analyst
+### Kết quả thực nghiệm (2-3 phút)
+
+**Câu mở đầu chuyển tiếp:**
+
+> "Cảm ơn Đức Anh. Em là Đức Danh, phụ trách phân tích và trình bày kết quả thực nghiệm."
+
+**Nội dung trình bày:**
+
+- **Bảng kết quả TLB Hit Rate theo từng test case:**
+  - TC1 (Sequential Access): **98.7%**
+  - TC2 (Random Access): mức trung gian
+  - TC3 (Working Set Variation lớn): chỉ còn **42.1%**
+
+- **Nhận xét chính:**
+  - Truy cập tuần tự tận dụng tốt **tính cục bộ không gian (spatial locality)** → TLB hit rate rất cao, hiệu năng tốt.
+  - Khi truy cập ngẫu nhiên hoặc working set lớn, tính cục bộ bị phá vỡ → hit rate giảm mạnh, hiệu năng hệ thống suy giảm rõ rệt.
+
+- **Điểm nhấn ấn tượng nhất:**
+  - **EMAT (Effective Memory Access Time)** tăng gần **45 lần** khi so sánh giữa TC1 và TC3.
+  - Đây là minh chứng rõ ràng cho tầm quan trọng của việc **thiết kế truy cập bộ nhớ có tính cục bộ (locality-aware)** trong lập trình và thiết kế hệ thống.
+
+> "Từ những kết quả này, mời bạn Lê Nghĩa trình bày phần thảo luận, hạn chế và kết luận của nhóm."
+
+---
+
+## 5. Trần Lê Nghĩa — Reviewer
+### Thảo luận, Hạn chế & Kết luận (2-3 phút)
+
+**Câu mở đầu chuyển tiếp:**
+
+> "Cảm ơn Đức Danh. Em là Lê Nghĩa, phụ trách phần thảo luận, đánh giá hạn chế và kết luận chung của báo cáo."
+
+**Nội dung trình bày:**
+
+- **Trade-off giữa các thiết kế page table:**
+  - **Flat page table:** đơn giản, dễ triển khai nhưng **rất tốn bộ nhớ** với không gian địa chỉ lớn.
+  - **Multilevel page table:** cân bằng tốt giữa bộ nhớ và hiệu năng, nhưng phát sinh thêm **độ trễ truy cập** do phải đi qua nhiều cấp.
+  - **Inverted page table:** tối ưu cho hệ thống có **RAM lớn**, nhưng **quá trình lookup phức tạp hơn**.
+
+- **Xu hướng hiện đại:**
+  - **ARM64:** sử dụng 4-level paging.
+  - **RISC-V:** các mô hình **Sv39, Sv48, Sv57**.
+  - **Huge Pages:** giúp giảm áp lực lên TLB bằng cách dùng trang có kích thước lớn hơn.
+
+- **Hạn chế của nghiên cứu:**
+  - Công cụ mô phỏng chưa phản ánh đầy đủ hành vi phần cứng thực tế, ví dụ: **cache hierarchy**, **NUMA (Non-Uniform Memory Access)**...
+
+- **Kết luận & khuyến nghị:**
+  - Không có một thiết kế page table nào **tối ưu tuyệt đối** cho mọi trường hợp.
+  - Việc lựa chọn thiết kế cần dựa trên **đặc điểm workload cụ thể** của hệ thống.
+  - **Hướng nghiên cứu tương lai:** mở rộng thử nghiệm với **RISC-V Sv48**, và tìm hiểu sâu hơn về **KPTI (Kernel Page Table Isolation)**.
+
+**Lời kết:**
+
+> "Trên đây là toàn bộ phần trình bày của nhóm 3 về đề tài Page Tables. Cảm ơn thầy/cô và các bạn đã lắng nghe. Nhóm em xin sẵn sàng nhận câu hỏi và góp ý."
+
+---
+
+## Ghi chú phân bổ thời gian
+
+| STT | Thành viên | Vai trò | Nội dung | Thời lượng |
+|---|---|---|---|---|
+| 1 | Nguyễn Hoàng Anh Khoa | Leader | Mở đầu & Đặt vấn đề | 2-3 phút |
+| 2 | Nguyễn Đăng Khoa | System Engineer | Nền tảng lý thuyết & Cơ chế kỹ thuật | 2-3 phút |
+| 3 | Trần Đức Anh | Experimental Engineer | Phương pháp & Thiết lập thí nghiệm | 2-3 phút |
+| 4 | Trần Đức Danh | Data Analyst | Kết quả thực nghiệm | 2-3 phút |
+| 5 | Trần Lê Nghĩa | Reviewer | Thảo luận, Hạn chế & Kết luận | 2-3 phút |
+| | | **Tổng cộng** | | **~12-15 phút** |
+
+> **Lưu ý cho cả nhóm:** mỗi phần chỉ nói sơ lược, không đi sâu vào công thức hay chi tiết kỹ thuật phức tạp. Nên có câu chuyển tiếp mượt giữa các thành viên (đã gợi ý sẵn ở đầu mỗi phần) để phần thuyết trình liền mạch, không bị ngắt quãng.
